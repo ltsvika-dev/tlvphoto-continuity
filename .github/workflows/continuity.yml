@@ -42,7 +42,7 @@ jobs:
       - name: Save the state
         run: |
           git config user.name "continuity-bot"; git config user.email "continuity-bot@users.noreply.github.com"
-          for f in state.json release.json vault.json; do [ -f "$f" ] && git add "$f"; done
+          for f in state.json release.json vault.json; do [ ! -f "$f" ] || git add "$f"; done
           git diff --cached --quiet || { git commit -m "continuity: $(cat .summary 2>/dev/null || echo state)"; git push; }
       - name: Keep the schedule on
         # GitHub turns off schedules in a repository with no activity for 60 days; this turns it back on every run
