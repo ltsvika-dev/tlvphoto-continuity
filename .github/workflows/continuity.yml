@@ -1,0 +1,49 @@
+name: Service continuity
+
+# every day: ask the TLVphoto accounts server when the owner was last active; remind after REMIND_DAYS, publish the
+# release key after RELEASE_DAYS (see README.md). Run by hand with action "here" (I'm here) or "release" (+ confirm RELEASE).
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "check, here (reset the count) or release (publish now)"
+        default: check
+        type: choice
+        options: [check, here, release]
+      confirm:
+        description: "type RELEASE to publish the release key now"
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency: continuity
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API: https://tlvphoto.co.il/auth/api.php
+      REMIND_DAYS: "120"
+      RELEASE_DAYS: "180"
+      RELEASE_KEY: ${{ secrets.RELEASE_KEY }}
+      ACTION: ${{ inputs.action || 'check' }}
+      CONFIRM: ${{ inputs.confirm }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and decide
+        run: node continuity.js
+      - name: Save the state
+        run: |
+          git config user.name "continuity-bot"; git config user.email "continuity-bot@users.noreply.github.com"
+          git add -A state.json release.json vault.json 2>/dev/null || true
+          git diff --cached --quiet || { git commit -m "continuity: $(cat .summary 2>/dev/null || echo state)"; git push; }
+      - name: Keep the schedule on
+        # GitHub turns off schedules in a repository with no activity for 60 days; this turns it back on every run
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/continuity.yml/enable" || true
